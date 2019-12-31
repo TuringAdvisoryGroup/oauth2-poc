@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/urfave/negroni"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -32,12 +34,16 @@ var (
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	n := negroni.Classic()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		u := config.AuthCodeURL("xyz")
 		http.Redirect(w, r, u, http.StatusFound)
 	})
 
-	http.HandleFunc("/oauth2", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/oauth2", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		state := r.Form.Get("state")
 		if state != "xyz" {
@@ -61,7 +67,7 @@ func main() {
 		e.Encode(token)
 	})
 
-	http.HandleFunc("/refresh", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/refresh", func(w http.ResponseWriter, r *http.Request) {
 		if globalToken == nil {
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
@@ -80,7 +86,7 @@ func main() {
 		e.Encode(token)
 	})
 
-	http.HandleFunc("/try", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/try", func(w http.ResponseWriter, r *http.Request) {
 		if globalToken == nil {
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
@@ -96,7 +102,7 @@ func main() {
 		io.Copy(w, resp.Body)
 	})
 
-	http.HandleFunc("/pwd", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/pwd", func(w http.ResponseWriter, r *http.Request) {
 		token, err := config.PasswordCredentialsToken(context.Background(), "test", "test")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -109,7 +115,7 @@ func main() {
 		e.Encode(token)
 	})
 
-	http.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
 		cfg := clientcredentials.Config{
 			ClientID:     config.ClientID,
 			ClientSecret: config.ClientSecret,
@@ -127,6 +133,8 @@ func main() {
 		e.Encode(token)
 	})
 
+	n.UseHandler(mux)
+
 	log.Println("Client is running at 9094 port.")
-	log.Fatal(http.ListenAndServe(":9094", nil))
+	log.Fatal(http.ListenAndServe(":9094", n))
 }

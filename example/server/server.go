@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/urfave/negroni"
+
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-session/session"
 	"gopkg.in/oauth2.v3/errors"
@@ -19,6 +21,11 @@ import (
 )
 
 func main() {
+	n := negroni.Classic()
+
+	mux := http.NewServeMux()
+	// map your routes
+
 	manager := manage.NewDefaultManager()
 	manager.SetAuthorizeCodeTokenCfg(manage.DefaultAuthorizeCodeTokenCfg)
 
@@ -56,10 +63,10 @@ func main() {
 		log.Println("Response Error:", re.Error.Error())
 	})
 
-	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/auth", authHandler)
+	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/auth", authHandler)
 
-	http.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		store, err := session.Start(nil, w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,14 +88,14 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		err := srv.HandleTokenRequest(w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		token, err := srv.ValidationBearerToken(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -105,8 +112,10 @@ func main() {
 		e.Encode(data)
 	})
 
+	n.UseHandler(mux)
+
 	log.Println("Server is running at 9096 port.")
-	log.Fatal(http.ListenAndServe(":9096", nil))
+	log.Fatal(http.ListenAndServe(":9096", n))
 }
 
 func userAuthorizeHandler(w http.ResponseWriter, r *http.Request) (userID string, err error) {
