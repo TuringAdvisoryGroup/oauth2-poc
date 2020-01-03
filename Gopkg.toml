@@ -32,3 +32,7 @@
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "github.com/vgarvardt/go-oauth2-pg"
+  version = "1.2.0"

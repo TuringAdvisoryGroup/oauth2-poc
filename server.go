@@ -3,27 +3,42 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"time"
+
+	"github.com/jackc/pgx"
+	pg "github.com/vgarvardt/go-oauth2-pg"
+	"github.com/vgarvardt/go-pg-adapter/pgxadapter"
 
 	"gopkg.in/oauth2.v3/errors"
 	"gopkg.in/oauth2.v3/manage"
 	"gopkg.in/oauth2.v3/models"
 	"gopkg.in/oauth2.v3/server"
-	"gopkg.in/oauth2.v3/store"
 )
 
 func main() {
+	pgxConnConfig, _ := pgx.ParseURI(os.Getenv("DB_URL"))
+	pgxConn, _ := pgx.Connect(pgxConnConfig)
+
 	manager := manage.NewDefaultManager()
-	// token memory store
-	manager.MustTokenStorage(store.NewMemoryTokenStore())
+	adapter := pgxadapter.NewConn(pgxConn)
+
+	// token pg store
+	tokenStore, _ := pg.NewTokenStore(adapter, pg.WithTokenStoreGCInterval(time.Minute))
+	defer tokenStore.Close()
+
+	// Manager Mapping
+	manager.MapTokenStorage(tokenStore)
 
 	// client memory store
-	clientStore := store.NewClientStore()
-	clientStore.Set("000000", &models.Client{
+	clientStore, _ := pg.NewClientStore(adapter)
+	manager.MapClientStorage(clientStore)
+
+	clientStore.Create(&models.Client{
 		ID:     "000000",
 		Secret: "999999",
-		Domain: "http://localhost",
+		Domain: "http://localhost:9094/",
 	})
-	manager.MapClientStorage(clientStore)
 
 	srv := server.NewDefaultServer(manager)
 	srv.SetAllowGetAccessRequest(true)

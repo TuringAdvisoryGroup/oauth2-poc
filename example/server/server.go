@@ -8,7 +8,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx"
 	"github.com/urfave/negroni"
+	pg "github.com/vgarvardt/go-oauth2-pg"
+	"github.com/vgarvardt/go-pg-adapter/pgxadapter"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-session/session"
@@ -17,7 +20,6 @@ import (
 	"gopkg.in/oauth2.v3/manage"
 	"gopkg.in/oauth2.v3/models"
 	"gopkg.in/oauth2.v3/server"
-	"gopkg.in/oauth2.v3/store"
 )
 
 func main() {
@@ -26,22 +28,28 @@ func main() {
 	mux := http.NewServeMux()
 	// map your routes
 
+	pgxConnConfig, _ := pgx.ParseURI(os.Getenv("DB_URL"))
+	pgxConn, _ := pgx.Connect(pgxConnConfig)
+	adapter := pgxadapter.NewConn(pgxConn)
+
 	manager := manage.NewDefaultManager()
 	manager.SetAuthorizeCodeTokenCfg(manage.DefaultAuthorizeCodeTokenCfg)
 
 	// token store
-	manager.MustTokenStorage(store.NewMemoryTokenStore())
+	tokenStore, _ := pg.NewTokenStore(adapter, pg.WithTokenStoreGCInterval(time.Minute))
+	defer tokenStore.Close()
+	manager.MapTokenStorage(tokenStore)
 
 	// generate jwt access token
 	manager.MapAccessGenerate(generates.NewJWTAccessGenerate([]byte("00000000"), jwt.SigningMethodHS512))
 
-	clientStore := store.NewClientStore()
-	clientStore.Set("222222", &models.Client{
+	clientStore, _ := pg.NewClientStore(adapter)
+	manager.MapClientStorage(clientStore)
+	clientStore.Create(&models.Client{
 		ID:     "222222",
 		Secret: "22222222",
 		Domain: "http://localhost:9094",
 	})
-	manager.MapClientStorage(clientStore)
 
 	srv := server.NewServer(server.NewConfig(), manager)
 
